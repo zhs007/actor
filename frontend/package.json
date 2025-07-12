@@ -1,0 +1,18 @@
+{
+  "name": "actor-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for AI Actor Chat System",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "serve": "python3 -m http.server 3000"
+  },
+  "keywords": ["ai", "chat", "frontend", "actor"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

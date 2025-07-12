@@ -137,3 +137,22 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Project specific
+# Environment variables
+.env
+*/.env
+backend/.env
+frontend/.env
+
+# Frontend build output
+frontend/dist/
+frontend/build/
+
+# Backend specific
+backend/uploads/
+backend/logs/
+
+# IDE files
+.vscode/
+.idea/

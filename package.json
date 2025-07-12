@@ -1,0 +1,21 @@
+{
+  "name": "ai-actor-chat",
+  "version": "1.0.0",
+  "description": "前后端分离的AI角色聊天系统，使用Gemini模型",
+  "main": "index.js",
+  "scripts": {
+    "install-all": "cd backend && npm install && cd ../frontend && npm install",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start",
+    "clean": "rm -rf backend/node_modules frontend/node_modules backend/package-lock.json frontend/package-lock.json"
+  },
+  "keywords": ["ai", "chat", "gemini", "nodejs", "frontend", "backend"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

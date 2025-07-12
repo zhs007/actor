@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 角色聊天系统</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="app-title">🎭 AI 角色聊天</h1>
+                <p class="app-subtitle">选择一个角色，开始对话</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Actor Selection -->
+            <section class="actor-selection" id="actorSelection">
+                <h2>选择聊天角色</h2>
+                <div class="actors-grid" id="actorsGrid">
+                    <!-- Actors will be loaded here -->
+                </div>
+            </section>
+
+            <!-- Chat Interface -->
+            <section class="chat-interface hidden" id="chatInterface">
+                <div class="chat-header">
+                    <button class="back-button" id="backButton">← 返回选择</button>
+                    <div class="current-actor">
+                        <span class="actor-icon">🎭</span>
+                        <span class="actor-name" id="currentActorName"></span>
+                    </div>
+                    <button class="clear-chat" id="clearChat">清空对话</button>
+                </div>
+
+                <div class="chat-messages" id="chatMessages">
+                    <!-- Messages will appear here -->
+                </div>
+
+                <div class="chat-input-container">
+                    <div class="chat-input-wrapper">
+                        <textarea 
+                            id="messageInput" 
+                            placeholder="输入您的消息..." 
+                            rows="1"
+                            maxlength="1000"
+                        ></textarea>
+                        <button id="sendButton" class="send-button" disabled>
+                            <span class="send-icon">→</span>
+                        </button>
+                    </div>
+                    <div class="input-footer">
+                        <span class="char-count">0/1000</span>
+                        <span class="tips">按 Enter 发送，Shift + Enter 换行</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Loading -->
+            <div class="loading hidden" id="loading">
+                <div class="loading-spinner"></div>
+                <p>AI 正在思考中...</p>
+            </div>
+
+            <!-- Error -->
+            <div class="error-message hidden" id="errorMessage">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                    <button class="error-close">×</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="./script.js"></script>
+</body>
+</html>
