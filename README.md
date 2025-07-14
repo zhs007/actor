@@ -7,9 +7,11 @@
 - 🎭 **多角色支持**: 智者、开朗朋友、神秘侦探、浪漫诗人等多种角色
 - 🤖 **Gemini AI**: 使用 Google Gemini 模型提供智能对话
 - 💬 **实时聊天**: 流畅的对话体验
+- 🔄 **流式传输**: SSE 技术实现打字机效果，提升交互体验
 - 📱 **响应式设计**: 支持桌面和移动设备
 - 🎨 **现代化UI**: 美观的用户界面设计
 - 🔒 **安全防护**: 包含率限制、CORS、安全头等防护措施
+- ⚙️ **配置化角色**: 每个角色独立配置，支持不同模型参数
 
 ## 技术栈
 
@@ -99,7 +101,12 @@ GET /api/health
 GET /api/actors
 ```
 
-### 发送消息
+### 获取特定角色详情
+```
+GET /api/actors/:actorId
+```
+
+### 发送消息 (传统方式)
 ```
 POST /api/chat
 Content-Type: application/json
@@ -111,12 +118,47 @@ Content-Type: application/json
 }
 ```
 
+### SSE 流式聊天 (推荐)
+```
+GET /api/chat/stream?message=消息&actorId=角色ID&chatHistory=编码后的历史
+
+返回 Server-Sent Events 流:
+- type: 'start' - 开始生成
+- type: 'chunk' - 内容片段
+- type: 'end' - 生成完成
+- type: 'error' - 发生错误
+```
+
+### 角色管理
+```
+GET /api/stats           # 获取角色统计
+POST /api/reload         # 重新加载配置 (仅开发环境)
+```
+
 ## 角色介绍
 
 - **智者** (`wise-sage`): 睿智的长者，提供人生建议
 - **开朗朋友** (`cheerful-friend`): 活泼开朗，充满正能量
 - **神秘侦探** (`mystery-detective`): 敏锐的推理和分析能力
 - **浪漫诗人** (`romantic-poet`): 富有诗意的浪漫主义者
+
+## 角色配置系统
+
+### 🎭 内置角色
+- **智者** (`wise-sage`): 睿智的长者，提供人生建议 🧙‍♂️
+- **开朗朋友** (`cheerful-friend`): 活泼开朗，充满正能量 😊
+- **神秘侦探** (`mystery-detective`): 敏锐的推理和分析能力 🕵️
+- **浪漫诗人** (`romantic-poet`): 富有诗意的浪漫主义者 🌹
+- **科技大神** (`tech-guru`): 精通技术的编程专家 👨‍💻
+
+### ⚙️ 自定义角色
+每个角色都有独立的配置文件，支持：
+- 🤖 **模型配置**: 选择AI模型和参数
+- 💬 **个性设置**: 定义角色性格和说话风格  
+- 🎯 **行为约束**: 控制角色行为边界
+- 🔧 **特殊指令**: 自定义角色独有功能
+
+详细配置说明: [📖 角色配置指南](./ACTOR-CONFIG.md)
 
 ## 开发脚本
 

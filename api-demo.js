@@ -27,7 +27,7 @@ async function getActors() {
     }
 }
 
-// 3. 发送聊天消息
+// 3. 发送聊天消息 (传统方式)
 async function sendChatMessage(message, actorId, chatHistory = []) {
     try {
         const response = await fetch(`${API_BASE_URL}/chat`, {
@@ -54,6 +54,56 @@ async function sendChatMessage(message, actorId, chatHistory = []) {
         console.error('发送消息失败:', error);
         throw error;
     }
+}
+
+// 4. SSE 流式聊天
+function sendChatMessageStream(message, actorId, chatHistory = []) {
+    return new Promise((resolve, reject) => {
+        const encodedHistory = encodeURIComponent(JSON.stringify(chatHistory));
+        const url = `${API_BASE_URL}/chat/stream?message=${encodeURIComponent(message)}&actorId=${actorId}&chatHistory=${encodedHistory}`;
+        
+        const eventSource = new EventSource(url);
+        let fullMessage = '';
+        
+        console.log('🔄 开始流式传输...');
+        
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            switch (data.type) {
+                case 'start':
+                    console.log(`💬 ${data.actor.name} 开始回复...`);
+                    break;
+                    
+                case 'chunk':
+                    process.stdout.write(data.content); // 实时显示内容
+                    fullMessage = data.fullContent;
+                    break;
+                    
+                case 'end':
+                    console.log(`\n✅ 回复完成: ${fullMessage}`);
+                    eventSource.close();
+                    resolve({
+                        message: data.message,
+                        actor: data.actor,
+                        timestamp: data.timestamp
+                    });
+                    break;
+                    
+                case 'error':
+                    console.error(`❌ 流式传输错误: ${data.error}`);
+                    eventSource.close();
+                    reject(new Error(data.error));
+                    break;
+            }
+        };
+        
+        eventSource.onerror = function(error) {
+            console.error('SSE 连接错误:', error);
+            eventSource.close();
+            reject(new Error('SSE connection failed'));
+        };
+    });
 }
 
 // 使用示例
@@ -117,6 +167,30 @@ async function errorHandlingDemo() {
     }
 }
 
+// SSE 流式传输演示
+async function streamingDemo() {
+    console.log('\n🔄 SSE 流式传输演示');
+    console.log('====================');
+
+    const actors = await getActors();
+    if (actors && actors.length > 0) {
+        const actor = actors[0];
+        console.log(`\n与 ${actor.name} 进行流式对话...`);
+
+        try {
+            const message = "请给我讲一个有趣的故事";
+            console.log(`用户: ${message}`);
+            console.log(`${actor.name}: `, ''); // 准备显示流式内容
+            
+            const response = await sendChatMessageStream(message, actor.id);
+            console.log(`\n流式传输完成！`);
+            
+        } catch (error) {
+            console.error('流式传输失败:', error.message);
+        }
+    }
+}
+
 // 如果是在浏览器环境中运行
 if (typeof window !== 'undefined') {
     // 将函数添加到全局对象，方便在浏览器控制台中测试
@@ -124,8 +198,10 @@ if (typeof window !== 'undefined') {
         healthCheck,
         getActors,
         sendChatMessage,
+        sendChatMessageStream,
         demo,
-        errorHandlingDemo
+        errorHandlingDemo,
+        streamingDemo
     };
 
     console.log('API 函数已添加到 window.actorAPI');
@@ -138,8 +214,10 @@ if (typeof module !== 'undefined' && module.exports) {
         healthCheck,
         getActors,
         sendChatMessage,
+        sendChatMessageStream,
         demo,
-        errorHandlingDemo
+        errorHandlingDemo,
+        streamingDemo
     };
 }
 

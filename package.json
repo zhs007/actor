@@ -10,7 +10,13 @@
     "dev:frontend": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build",
     "start": "cd backend && npm start",
-    "clean": "rm -rf backend/node_modules frontend/node_modules backend/package-lock.json frontend/package-lock.json"
+    "clean": "rm -rf backend/node_modules frontend/node_modules backend/package-lock.json frontend/package-lock.json",
+    "actors:list": "./manage-actors.sh list",
+    "actors:stats": "./manage-actors.sh stats",
+    "actors:test": "./manage-actors.sh test",
+    "actors:validate": "./manage-actors.sh validate",
+    "actors:reload": "./manage-actors.sh reload",
+    "actors:create": "./manage-actors.sh create"
   },
   "keywords": ["ai", "chat", "gemini", "nodejs", "frontend", "backend"],
   "author": "",

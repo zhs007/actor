@@ -3,10 +3,16 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { HttpsProxyAgent } = require('https-proxy-agent');
+const { setGlobalDispatcher, ProxyAgent } = require('undici');
+const ActorManager = require('./actorManager');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3001;
+
+// Initialize Actor Manager
+const actorManager = new ActorManager();
 
 // Security middleware
 app.use(helmet());
@@ -28,40 +34,15 @@ app.use(cors({
 // Body parser
 app.use(express.json({ limit: '10mb' }));
 
+// Configure proxy for Gemini API using undici
+if (process.env.HTTPS_PROXY) {
+  console.log(`🌐 Using proxy: ${process.env.HTTPS_PROXY}`);
+  const proxyAgent = new ProxyAgent(process.env.HTTPS_PROXY);
+  setGlobalDispatcher(proxyAgent);
+}
+
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Actor personas configuration
-const ACTORS = {
-  'wise-sage': {
-    name: '智者',
-    description: '一位睿智的长者，拥有丰富的人生阅历',
-    prompt: `你是一位智慧的长者，名叫智者。你有着丰富的人生阅历，总是能给出深刻而温暖的建议。
-你说话温和而有力，喜欢用比喻和故事来传达智慧。你对人生有着深刻的理解，总是能从不同角度看问题。
-请保持这个角色的特点来回应用户。`
-  },
-  'cheerful-friend': {
-    name: '开朗朋友',
-    description: '一个活泼开朗的好朋友，总是充满正能量',
-    prompt: `你是一个非常开朗活泼的朋友，总是充满正能量和热情。你喜欢用轻松幽默的方式与人交流，
-经常使用emoji表情，说话风格亲切友好。你总是能看到事物积极的一面，善于鼓励和安慰别人。
-请保持这个角色的特点来回应用户。`
-  },
-  'mystery-detective': {
-    name: '神秘侦探',
-    description: '一位敏锐的侦探，善于分析和推理',
-    prompt: `你是一位经验丰富的侦探，拥有敏锐的观察力和逻辑推理能力。你说话简洁有力，
-善于从细节中发现线索，总是能提出关键问题。你对人性和社会有着深刻的洞察，
-习惯用分析性的思维来处理问题。请保持这个角色的特点来回应用户。`
-  },
-  'romantic-poet': {
-    name: '浪漫诗人',
-    description: '一位充满诗意的浪漫主义者',
-    prompt: `你是一位富有诗意的浪漫主义者，对美和艺术有着深刻的感受。你说话优美而富有诗意，
-经常用美丽的比喻和意象来表达思想。你对爱情、自然和人生都有着浪漫的理解，
-善于用诗一般的语言来感动人心。请保持这个角色的特点来回应用户。`
-  }
-};
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -70,12 +51,56 @@ app.get('/api/health', (req, res) => {
 
 // Get available actors
 app.get('/api/actors', (req, res) => {
-  const actorsList = Object.keys(ACTORS).map(key => ({
-    id: key,
-    name: ACTORS[key].name,
-    description: ACTORS[key].description
-  }));
-  res.json(actorsList);
+  try {
+    const actors = actorManager.getAllActors();
+    res.json(actors);
+  } catch (error) {
+    console.error('Get actors error:', error);
+    res.status(500).json({ error: '获取角色列表失败' });
+  }
+});
+
+// Get specific actor details
+app.get('/api/actors/:actorId', (req, res) => {
+  try {
+    const { actorId } = req.params;
+    const actor = actorManager.getActor(actorId);
+    
+    if (!actor) {
+      return res.status(404).json({ error: '角色不存在' });
+    }
+    
+    res.json(actor);
+  } catch (error) {
+    console.error('Get actor details error:', error);
+    res.status(500).json({ error: '获取角色详情失败' });
+  }
+});
+
+// Get actor statistics
+app.get('/api/stats', (req, res) => {
+  try {
+    const stats = actorManager.getStats();
+    res.json(stats);
+  } catch (error) {
+    console.error('Get stats error:', error);
+    res.status(500).json({ error: '获取统计信息失败' });
+  }
+});
+
+// Reload actor configurations (for development)
+app.post('/api/reload', (req, res) => {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: '生产环境不允许重新加载配置' });
+    }
+    
+    actorManager.reloadActors();
+    res.json({ message: '角色配置已重新加载', timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Reload actors error:', error);
+    res.status(500).json({ error: '重新加载配置失败' });
+  }
 });
 
 // Chat endpoint
@@ -87,28 +112,21 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: '消息和角色ID是必需的' });
     }
 
-    if (!ACTORS[actorId]) {
+    if (!actorManager.hasActor(actorId)) {
       return res.status(400).json({ error: '无效的角色ID' });
     }
 
-    const actor = ACTORS[actorId];
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
-    // Build conversation context
-    let conversationContext = actor.prompt + "\n\n";
+    const actor = actorManager.getActor(actorId);
+    const modelConfig = actorManager.getModelConfig(actorId);
     
-    // Add chat history for context
-    if (chatHistory.length > 0) {
-      conversationContext += "之前的对话:\n";
-      chatHistory.slice(-5).forEach(msg => { // Only use last 5 messages for context
-        conversationContext += `用户: ${msg.user}\n${actor.name}: ${msg.assistant}\n`;
-      });
-      conversationContext += "\n";
-    }
+    // 使用配置中的模型设置
+    const model = genAI.getGenerativeModel(modelConfig);
 
-    conversationContext += `用户说: ${message}\n请以${actor.name}的身份回应:`;
+    // 构建对话上下文
+    const conversationPrompt = actorManager.buildPrompt(actorId, chatHistory);
+    const fullPrompt = conversationPrompt + `用户说: ${message}\n请以${actor.name}的身份回应:`;
 
-    const result = await model.generateContent(conversationContext);
+    const result = await model.generateContent(fullPrompt);
     const response = await result.response;
     const text = response.text();
 
@@ -116,7 +134,8 @@ app.post('/api/chat', async (req, res) => {
       message: text,
       actor: {
         id: actorId,
-        name: actor.name
+        name: actor.name,
+        avatar: actor.avatar || '🎭'
       },
       timestamp: new Date().toISOString()
     });
@@ -132,6 +151,107 @@ app.post('/api/chat', async (req, res) => {
       error: '服务器内部错误',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
+});
+
+// SSE Stream chat endpoint
+app.get('/api/chat/stream', async (req, res) => {
+  try {
+    const { message, actorId, chatHistory } = req.query;
+    const parsedHistory = chatHistory ? JSON.parse(decodeURIComponent(chatHistory)) : [];
+
+    if (!message || !actorId) {
+      return res.status(400).json({ error: '消息和角色ID是必需的' });
+    }
+
+    if (!actorManager.hasActor(actorId)) {
+      return res.status(400).json({ error: '无效的角色ID' });
+    }
+
+    // Set SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || 'http://localhost:3000',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    const actor = actorManager.getActor(actorId);
+    const modelConfig = actorManager.getModelConfig(actorId);
+    
+    // 使用流式模型
+    const model = genAI.getGenerativeModel(modelConfig);
+
+    // 构建对话上下文
+    const conversationPrompt = actorManager.buildPrompt(actorId, parsedHistory);
+    const fullPrompt = conversationPrompt + `用户说: ${message}\n请以${actor.name}的身份回应:`;
+
+    try {
+      // 使用流式生成
+      const result = await model.generateContentStream(fullPrompt);
+      
+      // 发送开始事件
+      res.write(`data: ${JSON.stringify({
+        type: 'start',
+        actor: {
+          id: actorId,
+          name: actor.name,
+          avatar: actor.avatar || '🎭'
+        },
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+
+      let fullMessage = '';
+      
+      // 逐步发送内容
+      for await (const chunk of result.stream) {
+        const chunkText = chunk.text();
+        fullMessage += chunkText;
+        
+        res.write(`data: ${JSON.stringify({
+          type: 'chunk',
+          content: chunkText,
+          fullContent: fullMessage
+        })}\n\n`);
+      }
+
+      // 发送结束事件
+      res.write(`data: ${JSON.stringify({
+        type: 'end',
+        message: fullMessage,
+        actor: {
+          id: actorId,
+          name: actor.name,
+          avatar: actor.avatar || '🎭'
+        },
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+
+    } catch (streamError) {
+      console.error('Stream generation error:', streamError);
+      
+      // 发送错误事件
+      res.write(`data: ${JSON.stringify({
+        type: 'error',
+        error: '生成回复时出错',
+        details: process.env.NODE_ENV === 'development' ? streamError.message : undefined
+      })}\n\n`);
+    }
+
+    res.end();
+
+  } catch (error) {
+    console.error('SSE Chat error:', error);
+    
+    // 发送错误事件
+    res.write(`data: ${JSON.stringify({
+      type: 'error',
+      error: error.message.includes('API key') ? 'Gemini API密钥未配置或无效' : '服务器内部错误',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    })}\n\n`);
+    
+    res.end();
   }
 });
 
