@@ -97,6 +97,28 @@ async function sendMessage(message, actorId, history) {
     }
 }
 
+// 检查文本是否包含markdown语法
+function hasMarkdownSyntax(text) {
+    const markdownPatterns = [
+        /\*\*.*?\*\*/,  // 粗体
+        /\*.*?\*/,      // 斜体
+        /`.*?`/,        // 行内代码
+        /```[\s\S]*?```/, // 代码块
+        /^#+\s/m,       // 标题
+        /^[-*+]\s/m,    // 列表
+        /^>\s/m,        // 引用
+        /\[.*?\]\(.*?\)/, // 链接
+        /\n/            // 换行符
+    ];
+    return markdownPatterns.some(pattern => pattern.test(text));
+}
+
+// 简单的文本预处理，至少处理换行符
+function processBasicFormatting(text) {
+    // 将换行符转换为<br>标签，同时保持其他文本安全
+    return escapeHtml(text).replace(/\n/g, '<br>');
+}
+
 // 模拟打字机效果的函数
 async function simulateTypingEffect(message, messageElement, speed = 30) {
     return new Promise((resolve) => {
@@ -107,13 +129,26 @@ async function simulateTypingEffect(message, messageElement, speed = 30) {
         const typeInterval = setInterval(() => {
             if (index < message.length) {
                 currentText += message[index];
-                contentElement.innerHTML = escapeHtml(currentText) + '<span class="typing-cursor">|</span>';
+                
+                // 如果包含markdown语法且文本较短，尝试完整markdown渲染
+                if (hasMarkdownSyntax(currentText) && currentText.length < 500) {
+                    try {
+                        contentElement.innerHTML = renderMarkdown(currentText) + '<span class="typing-cursor">|</span>';
+                    } catch (error) {
+                        // 如果markdown渲染失败（可能是不完整的语法），降级到基础格式化
+                        contentElement.innerHTML = processBasicFormatting(currentText) + '<span class="typing-cursor">|</span>';
+                    }
+                } else {
+                    // 使用基础格式化（至少支持换行）
+                    contentElement.innerHTML = processBasicFormatting(currentText) + '<span class="typing-cursor">|</span>';
+                }
+                
                 index++;
                 scrollToBottom();
             } else {
                 clearInterval(typeInterval);
-                // 移除光标
-                contentElement.innerHTML = escapeHtml(message);
+                // 完成时渲染最终的 markdown
+                contentElement.innerHTML = renderMarkdown(message);
                 messageElement.classList.remove('streaming');
                 resolve();
             }
@@ -263,7 +298,19 @@ function createStreamingMessage(actor) {
 // 更新流式消息内容
 function updateStreamingMessage(messageElement, content) {
     const contentElement = messageElement.querySelector('.message-content');
-    contentElement.innerHTML = `<span class="streaming-text">${escapeHtml(content)}<span class="cursor">|</span></span>`;
+    
+    // 如果包含markdown语法且文本较短，尝试实时渲染
+    if (hasMarkdownSyntax(content) && content.length < 800) {
+        try {
+            contentElement.innerHTML = renderMarkdown(content) + '<span class="cursor">|</span>';
+        } catch (error) {
+            // 如果markdown渲染失败，降级到基础格式化
+            contentElement.innerHTML = processBasicFormatting(content) + '<span class="cursor">|</span>';
+        }
+    } else {
+        // 使用基础格式化（至少支持换行）
+        contentElement.innerHTML = processBasicFormatting(content) + '<span class="cursor">|</span>';
+    }
 }
 
 // 完成流式消息
@@ -272,7 +319,8 @@ function finalizeStreamingMessage(messageElement, finalContent, timestamp) {
     const contentElement = messageElement.querySelector('.message-content');
     const timeElement = messageElement.querySelector('.message-time');
     
-    contentElement.innerHTML = escapeHtml(finalContent);
+    // 渲染最终的 markdown 内容
+    contentElement.innerHTML = renderMarkdown(finalContent);
     timeElement.textContent = formatTime(new Date(timestamp));
 }
 
@@ -358,6 +406,31 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// 新增：渲染 Markdown 的函数
+function renderMarkdown(text) {
+    if (typeof marked === 'undefined') {
+        // 如果 marked 库未加载，降级到纯文本显示
+        console.warn('Marked library not loaded, falling back to plain text');
+        return escapeHtml(text);
+    }
+    
+    try {
+        // 配置 marked 选项 (v12.x 语法)
+        marked.setOptions({
+            breaks: true, // 支持换行
+            gfm: true,    // 支持 GitHub Flavored Markdown
+            headerIds: false, // 禁用标题ID
+            mangle: false     // 禁用标题修改
+        });
+        
+        // v12.x 使用 marked.parse() 方法
+        return marked.parse(text);
+    } catch (error) {
+        console.error('Markdown rendering error:', error);
+        return escapeHtml(text);
+    }
+}
+
 function updateCharCount() {
     const count = elements.messageInput.value.length;
     const charCountElement = document.querySelector('.char-count');
@@ -384,7 +457,7 @@ function addAssistantMessage(message, timestamp) {
     const assistantMessage = document.createElement('div');
     assistantMessage.className = 'message assistant';
     assistantMessage.innerHTML = `
-        <div class="message-content">${escapeHtml(message)}</div>
+        <div class="message-content">${renderMarkdown(message)}</div>
         <div class="message-time">${formatTime(new Date(timestamp))}</div>
     `;
     elements.chatMessages.appendChild(assistantMessage);

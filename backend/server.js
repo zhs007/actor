@@ -108,6 +108,9 @@ app.post('/api/chat', async (req, res) => {
   try {
     const { message, actorId, chatHistory = [] } = req.body;
 
+    // 记录请求信息
+    console.log(`📨 Chat request: actorId=${actorId}, messageLength=${message?.length}, historyLength=${chatHistory?.length}`);
+
     if (!message || !actorId) {
       return res.status(400).json({ error: '消息和角色ID是必需的' });
     }
@@ -126,9 +129,20 @@ app.post('/api/chat', async (req, res) => {
     const conversationPrompt = actorManager.buildPrompt(actorId, chatHistory);
     const fullPrompt = conversationPrompt + `用户说: ${message}\n请以${actor.name}的身份回应:`;
 
+    console.log(`🤖 Sending request to Gemini API, prompt length: ${fullPrompt.length}`);
+    
     const result = await model.generateContent(fullPrompt);
+    
+    console.log(`✅ Received response from Gemini API`);
+    
     const response = await result.response;
     const text = response.text();
+
+    console.log(`📤 Sending response, length: ${text.length}, content preview: ${text.substring(0, 100)}...`);
+    
+    if (!text || text.trim().length === 0) {
+      console.warn(`⚠️ Empty response from Gemini API for message: ${message.substring(0, 100)}...`);
+    }
 
     res.json({
       message: text,
@@ -141,10 +155,24 @@ app.post('/api/chat', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Chat error:', error);
+    console.error('Chat error:', {
+      message: error.message,
+      stack: error.stack,
+      actorId,
+      messageLength: message?.length,
+      timestamp: new Date().toISOString()
+    });
     
     if (error.message.includes('API key')) {
       return res.status(401).json({ error: 'Gemini API密钥未配置或无效' });
+    }
+    
+    if (error.message.includes('quota') || error.message.includes('limit')) {
+      return res.status(429).json({ error: 'API调用频率限制，请稍后重试' });
+    }
+    
+    if (error.message.includes('timeout')) {
+      return res.status(408).json({ error: '请求超时，请重试' });
     }
     
     res.status(500).json({ 
@@ -159,6 +187,9 @@ app.get('/api/chat/stream', async (req, res) => {
   try {
     const { message, actorId, chatHistory } = req.query;
     const parsedHistory = chatHistory ? JSON.parse(decodeURIComponent(chatHistory)) : [];
+
+    // 记录流式请求信息
+    console.log(`🔄 Stream request: actorId=${actorId}, messageLength=${message?.length}, historyLength=${parsedHistory?.length}`);
 
     if (!message || !actorId) {
       return res.status(400).json({ error: '消息和角色ID是必需的' });
@@ -187,9 +218,13 @@ app.get('/api/chat/stream', async (req, res) => {
     const conversationPrompt = actorManager.buildPrompt(actorId, parsedHistory);
     const fullPrompt = conversationPrompt + `用户说: ${message}\n请以${actor.name}的身份回应:`;
 
+    console.log(`🤖 Sending stream request to Gemini API, prompt length: ${fullPrompt.length}`);
+
     try {
       // 使用流式生成
       const result = await model.generateContentStream(fullPrompt);
+      
+      console.log(`✅ Stream started from Gemini API`);
       
       // 发送开始事件
       res.write(`data: ${JSON.stringify({
@@ -203,11 +238,15 @@ app.get('/api/chat/stream', async (req, res) => {
       })}\n\n`);
 
       let fullMessage = '';
+      let chunkCount = 0;
       
       // 逐步发送内容
       for await (const chunk of result.stream) {
         const chunkText = chunk.text();
         fullMessage += chunkText;
+        chunkCount++;
+        
+        console.log(`📨 Stream chunk ${chunkCount}, length: ${chunkText.length}, total: ${fullMessage.length}`);
         
         res.write(`data: ${JSON.stringify({
           type: 'chunk',
@@ -215,6 +254,8 @@ app.get('/api/chat/stream', async (req, res) => {
           fullContent: fullMessage
         })}\n\n`);
       }
+
+      console.log(`🏁 Stream completed, total chunks: ${chunkCount}, final length: ${fullMessage.length}`);
 
       // 发送结束事件
       res.write(`data: ${JSON.stringify({
@@ -229,7 +270,13 @@ app.get('/api/chat/stream', async (req, res) => {
       })}\n\n`);
 
     } catch (streamError) {
-      console.error('Stream generation error:', streamError);
+      console.error('Stream generation error:', {
+        message: streamError.message,
+        stack: streamError.stack,
+        actorId,
+        messageLength: message?.length,
+        timestamp: new Date().toISOString()
+      });
       
       // 发送错误事件
       res.write(`data: ${JSON.stringify({
